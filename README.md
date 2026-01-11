@@ -1,58 +1,88 @@
-# Eye Blinking CAPTCHA (GUI Based)
+import cv2
+import random
+import time
+import tkinter as tk
+from tkinter import messagebox
 
-This project is a GUI-based human verification system using eye blink detection.  
-It uses a webcam and a live window instead of text or image puzzles.
+eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
 
-## What this project does
-The program opens the system camera.  
-It asks the user to blink their eyes a random number of times.  
-Blinking is tracked in real time on the screen.  
-On success, a GUI popup confirms verification.
+def show_success_popup():
+    root = tk.Tk()
+    root.withdraw()
+    messagebox.showinfo("Verification", "EYe Blink Captcha Test successfully passed!")
+    root.destroy()
 
-## How verification works
-The camera captures live video frames.  
-Frames are converted to grayscale.  
-Eye detection is done using Haar Cascade.  
-If eyes disappear for a few frames, it is treated as a blink.  
-Blink count increases only after proper eye open-close cycles.
+def count_blinks(cap, required_blinks=3, timeout=20):
+    blink_count = 0
+    eye_closed_frames = 0
+    eye_open_frames = 0
+    blink_detected = False
+    start_time = time.time()
+    init_ignore_frames = 10  # Ignore first 10 frames to allow camera to stabilize
+    frame_count = 0
 
-## Key logic in this code
-Random blink requirement between 2 and 5.  
-First few frames are ignored for camera stabilization.  
-Blink detection avoids false positives.  
-A timeout of 20 seconds is applied.  
-ESC key allows manual exit.
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            print("Camera error")
+            break
 
-## User experience
-Live window shows blink count progress.  
-Clear instruction is printed in console.  
-Successful verification shows a popup message.  
-Failure happens on timeout or exit.
+        frame_count += 1
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        eyes = eye_cascade.detectMultiScale(gray, 1.3, 5)
 
-## Tech used
-Python  
-OpenCV  
-Tkinter for GUI popup  
-Haar Cascade for eye detection  
-Real-time video processing
+        if frame_count <= init_ignore_frames:
+            cv2.putText(frame, f"Initializing...", (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
+            cv2.imshow('Eye Blink CAPTCHA', frame)
+            if cv2.waitKey(30) & 0xFF == 27:
+                break
+            continue
 
-## Current limitations
-Works best in good lighting.  
-Single-user detection only.  
-Desktop webcam required.
+        if len(eyes) == 0:
+            eye_closed_frames += 1
+            eye_open_frames = 0
+        else:
+            eye_open_frames += 1
+            if eye_closed_frames > 2 and not blink_detected:
+                blink_count += 1
+                print(f"Blink detected: {blink_count}")
+                blink_detected = True
+            elif eye_open_frames > 2:
+                blink_detected = False
+            eye_closed_frames = 0
 
-## Future improvements
-Better low-light handling  
-Face alignment checks  
-Mobile-friendly version  
-Web or API version later
+        cv2.putText(frame, f"Blink count: {blink_count}/{required_blinks}", (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cv2.imshow('Eye Blink CAPTCHA', frame)
 
-## Why this project matters
-It shows computer vision basics.  
-It replaces annoying CAPTCHAs.  
-It proves human verification logic.  
-Good showcase for CV and Python skills.
+        if blink_count >= required_blinks:
+            print("Eye Blink Captcha Test successfully passed!")
+            show_success_popup()
+            break
 
-## Note
-This project is built for learning and demonstration.  
-It focuses on logic clarity and real-time behavior.  
+        if (time.time() - start_time) > timeout:
+            print("Timeout! Verification failed.")
+            break
+
+        if cv2.waitKey(30) & 0xFF == 27:
+            print("User exited.")
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+    return blink_count >= required_blinks
+
+# --- MAIN ---
+
+required_blinks = random.randint(2, 5)
+print(f"Please blink your eyes {required_blinks} times within 20 seconds.")
+
+cap = cv2.VideoCapture(0)
+
+result = count_blinks(cap, required_blinks)
+
+if result:
+    print("CAPTCHA Verified: Human detected.")
+else:
+    print("CAPTCHA Failed: No human detected or timeout.")
